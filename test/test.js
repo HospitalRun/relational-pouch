@@ -2048,7 +2048,7 @@ function tests(dbName, dbType) {
     });
   }); 
   
-  it('should query with map/reduce function', function () {
+  it('should query with map/reduce function in proper order', function () {
 
     db.setSchema([{
       singular: 'post',
@@ -2106,5 +2106,66 @@ function tests(dbName, dbType) {
     });
   }); 
   
+  it('should query with map/reduce function in proper order', function () {
+
+    db.setSchema([{
+      singular: 'post',
+      plural: 'posts'
+    }]);
+    
+    var ddoc = {
+      _id: '_design/index',
+      views: {
+        by_text: {
+          map: function (doc) {
+            if (doc.data.text) {
+              emit(doc.data.text);
+            }
+          }.toString()
+        }
+      }
+    };
+
+    return db.put(ddoc).catch(function (err) {
+      if (err.status !== 409) {
+        throw err;
+      }
+      // ignore if doc already exists
+    }).then(function () {
+      return db.rel.save('post', {
+        title: 'Rails is Omakase',
+        text: 'There are a lot of ala carte blah blah blah',
+        id: 1
+      });
+    }).then(function () {
+      return db.rel.save('post', {
+        title: 'Rails is Unagi',
+        text: 'Declicious unagi',
+        id: 2
+      });
+    }).then(function () {
+      return db.rel.query('post', 'index/by_text', {
+        limit: 2        
+      });
+    }).then(function (res) {
+      res.posts.forEach(function (post) {
+        post.rev.should.be.a('string');
+        delete post.rev;
+      });
+      res.should.deep.equal({
+        posts: [
+          {
+            title: 'Rails is Unagi',
+            text: 'Declicious unagi',
+            id: 2
+          }, {
+            title: 'Rails is Omakase',
+            text: 'There are a lot of ala carte blah blah blah',
+            id: 1
+          }
+        ]
+      });
+    });
+  }); 
   
 }
